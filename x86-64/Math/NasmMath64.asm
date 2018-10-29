@@ -147,23 +147,23 @@
 
 
 ;********************************************************************
-; .data (Names in spanish... comments were originally in spanish...)
+; .data
 ;********************************************************************
 
 section .data
 
   ;***** Constants *****;
-    trescientossesenta32bits:  equ 0x43b40000                         ;32-bits 360.f
-    dos32bits:                 equ 01000000000000000000000000000000b  ;32-bits 2.f
-    menosuno32bits:            equ 0xbf800000                         ;32-bits -1.f
-    unopositivo32bits:         equ 0x3f800000                         ;32-bits +1.f
-    cambiosigno32bits:         equ 10000000000000000000000000000000b  ;It can change the sign if XOR'd
-    cientoochentafloat32bits:  equ 0x43340000                         ;32-bits 180.f
-    PIentreCientoochenta32bits:equ 0x3c8efa35                         ;32-bits (PI/180.f)
-    CientoochentaEntrePI32bits:equ 0x42652ee1                         ;32-bits (180.f/PI)
+    fc_360f:                   equ 0x43b40000                         ;32-bits 360.f
+    fc_2f:                     equ 01000000000000000000000000000000b  ;32-bits 2.f
+    fc_m_1f:                   equ 0xbf800000                         ;32-bits -1.f
+    fc_1f:                     equ 0x3f800000                         ;32-bits +1.f
+    SignChange32bits:          equ 10000000000000000000000000000000b  ;It can change the sign if XOR'd
+    fc_180f:                   equ 0x43340000                         ;32-bits 180.f
+    fc_PIdiv180f:              equ 0x3c8efa35                         ;32-bits (PI/180.f)
+    fc_180fdivPI:              equ 0x42652ee1                         ;32-bits (180.f/PI)
 
 ;***** Variables *****;
-    PIentreCientoochenta32bits_mem: dd 0x3c8efa35                     ;32-bits (PI/180.f)
+    fc_PIdiv180f_mem:           dd 0x3c8efa35                     ;32-bits (PI/180.f)
 
 
 
@@ -185,7 +185,7 @@ V2Rotate_FPU:
 
     sub rsp,8
 
-    fld dword [PIentreCientoochenta32bits_mem]
+    fld dword [fc_PIdiv180f_mem]
         pxor xmm4,xmm4
         pxor xmm3,xmm3
         
@@ -684,7 +684,7 @@ global QuaternionMUL; (float * A, float * B, float * Result);
 ;**********************************
 QuaternionMUL:
     enter 0,0
-    mov rcx, cambiosigno32bits
+    mov rcx, SignChange32bits
     push rcx
         movss xmm5,[rsp]
 
@@ -748,7 +748,7 @@ global QuaternionToMatrix4x4; QuaternionToMatrix4x4(float * Quaternion, float * 
 QuaternionToMatrix4x4: 
     enter 0,0
     
-    mov dword[rsi],cambiosigno32bits
+    mov dword[rsi],SignChange32bits
                 movss xmm7,[rsi]
                 ;xmm7 [0][0][0][0x800000]
 
@@ -836,7 +836,7 @@ AxisAngleToQuaternion:
     enter 0,0
 	sub rsp,8
 	movss [rsp],xmm0
-        push CientoochentaEntrePI32bits
+        push fc_180fdivPI
         fld dword [rsp+8]
         fld dword [rsp]
         fdivp
@@ -870,11 +870,11 @@ global PerspectiveProjectionMatrix4x4
 PerspectiveProjectionMatrix4x4: 
 enter 0,0
 
-    mov rsi, trescientossesenta32bits
+    mov rsi, fc_360f
 	    pxor xmm12,xmm12
 	    movaps xmm11,xmm3
 push rsi
-	    mov esi, menosuno32bits
+	    mov esi, fc_m_1f
 	    pxor xmm10,xmm10
 	fldpi
 sub rsp,8
@@ -941,7 +941,7 @@ global OrthogonalProjectionMatrix4x4;
 OrthogonalProjectionMatrix4x4: 
     enter 0,0
 
-    mov rsi,dos32bits
+    mov rsi,fc_2f
     movss xmm4,xmm3
     subss xmm4,xmm2
     push rsi
@@ -951,7 +951,7 @@ OrthogonalProjectionMatrix4x4:
     pxor xmm5,xmm5
     pxor xmm6,xmm6
     movss xmm7,xmm2
-    mov rsi,unopositivo32bits
+    mov rsi,fc_1f
     divss xmm2,xmm0
     movss xmm0,xmm7
     divss xmm7,xmm1
@@ -992,7 +992,7 @@ ViewLookAt:
 enter 0,0
     push rax
     xor eax,eax
-    mov eax,menosuno32bits
+    mov eax,fc_m_1f
     push rax 
 
     pxor xmm3,xmm3

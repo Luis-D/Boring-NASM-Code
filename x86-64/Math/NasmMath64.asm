@@ -3,7 +3,7 @@
 ; System V AMD64 ABI Convention (*nix)
 ; Function parameters are passed this way:
 ; Interger values: RDI, RSI, RDX, RCX, R8, R9
-; Float Point values: arg1f, arg2f, arg3f, arg4f, XMM4, XMM5, XMM6, XMM7
+; Float Point values: XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7
 ; Extra arguments are pushed on the stack starting from the most left argument
 ; Function return value is returned this way:
 ; Integer value: RAX:RDX 
@@ -13,7 +13,7 @@
 ; Microsoft x64 calling convention (Windows)
 ; Function parameters are passed this way:
 ; Interger values: RCX, RDX, R8, R9
-; Float Point values: arg1f, arg2f, arg3f, arg4f 
+; Float Point values: XMM0, XMM1, XMM2, XMM3 
 ; Both kind of arguments are counted together
 ; e.g. if the second argument is a float, it will be in arg2f, if Interger, then RDX
 ; Extra arguments are pushed on the stack 

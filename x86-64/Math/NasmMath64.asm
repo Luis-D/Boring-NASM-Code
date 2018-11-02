@@ -1,6 +1,7 @@
 ; To be used with NASM-Compatible Assemblers
 
 ; System V AMD64 ABI Convention
+; (Note: it can run on Intel processors as well)
 
 ; Function parameters are passed this way:
 ; Interger values: RDI, RSI, RDX, RCX, R8, R9, R10, and R11
@@ -178,7 +179,7 @@ section .text
 global V2Rotate_FPU; 
 ;void V2Rotate_FPU(float * Vec2_A, float * Angle_Degrees, float * Vec2_Result);
 ;****************************************************************
-It rotates 2D point A around (0,0) by and angle given in degrees.
+;It rotates 2D point A around (0,0) by and angle given in degrees.
 ;****************************************************************
 V2Rotate_FPU:
     enter 0,0
@@ -326,7 +327,7 @@ global V4V4SUB; void V4V4ADD(float * A, float *B, float * Result);
 ;Given A and B (both 4D vectors),
 ;4D Vector Result = (Ax - Bx, Ay - By, Az - Bz, Aw - Bw);
 ;*********************************************************
-V4V4ADD:
+V4V4SUB:
     enter 0,0
         movups xmm0,[rdi]
         movups xmm1,[rsi]

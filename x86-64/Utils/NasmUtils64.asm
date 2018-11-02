@@ -1,22 +1,72 @@
 ; To be used with NASM-Compatible Assemblers
 
-; System V AMD64 ABI Convention
-
+; System V AMD64 ABI Convention (*nix)
 ; Function parameters are passed this way:
-; Interger values: RDI, RSI, RDX, RCX, R8, R9, R10, and R11
-; Float Point values: XMM0, XMM1, XMM2, XMM3 
-
+; Interger values: RDI, RSI, RDX, RCX, R8, R9
+; Float Point values: arg1f, arg2f, arg3f, RCXf, XMM4, XMM5, XMM6, XMM7
+; Extra arguments are pushed on the stack starting from the most left argument
 ; Function return value is returned this way:
 ; Integer value: RAX:RDX 
-; Float Point value: XMM0
+; Float Point value: arg1f:arg2f
+; RAX, R10 and R11 are volatile
 
-; SSE, SSE2
+; Microsoft x64 calling convention (Windows)
+; Function parameters are passed this way:
+; Interger values: RCX, RDX, R8, R9
+; Float Point values: arg1f, arg2f, arg3f, RCXf 
+; Both kind of arguments are counted together
+; e.g. if the second argument is a float, it will be in arg2f, if Interger, then RDX
+; Extra arguments are pushed on the stack 
+; Function return value is returned this way:
+; Integer value: RAX
+; Float Point value: arg1f
+; XMM4, XMM5, RAX, R10 and R11 are volatile
 
-; Luis Delgado. November 13, 2018 (Date of last edition).
+; SSE, SSE2, SSE3
+
+; Luis Delgado.
+
+;November 13, 2018: Date of last edition (before translation).
+;Octuber 2, 2018:   Adding Windows support.
 
 ; Collection of varied simple functions.
 
 
+;*****************************
+;MACROS
+;*****************************
+
+%ifidn __OUTPUT_FORMAT__, elf64 
+%elifidn __OUTPUT_FORMAT__, win64
+%endif
+
+%ifidn __OUTPUT_FORMAT__, win64 
+%endif
+
+%macro args_reset 0
+    %ifidn __OUTPUT_FORMAT__, elf64 
+        %define arg1 RDI
+        %define arg2 RSI
+        %define arg3 RDX
+        %define RCX RCX
+        %define arg5 R8
+        %define arg6 R9 
+    %elifidn __OUTPUT_FORMAT__, win64
+        %define arg1 RCX
+        %define arg2 RDX
+        %define arg3 R8
+        %define RCX R9
+        %define arg5 [rbp+48]
+        %define arg6 [rbp+48+8]
+    %endif
+
+    %define arg1f XMM0
+    %define arg2f XMM1
+    %define arg3f XMM2
+    %define RCXf XMM3
+%endmacro
+
+args_reset ;<--Sets arguments definitions to normal, as it's definitions can change.
 
 ;********************************
 ; CODE
@@ -28,45 +78,55 @@ global fastmemcpy; void fastmemcpy(void * Destiny, void * Source, uint64_t bytes
 ; It uses the XMM registers to move data from Source to Destiny
 ;***************************************************************
 fastmemcpy:
-    enter 0,0
+%ifidn __OUTPUT_FORMAT__, win64 
+    mov RAX,RCX
+    %define arg1 RAX
+%endif
 
-    mov rcx,rdx
+    enter 0,0
+    mov RCX,arg3
 
     Loopprincipal:
-        cmp rcx,16
+        cmp RCX,16
         jb NohacerXMM128
-            movups xmm0,[rsi+rcx-16]
-            movups [rdi+rcx-16],xmm0
-            sub rcx,15
+            movups xmm0,[arg2+RCX-16]
+            movups [arg1+RCX-16],xmm0
+            sub RCX,15
             jmp TerminarCiclo
         NohacerXMM128:
-            cmp rcx,8
+            cmp RCX,8
             jb NohacerXMM64
-                movsd xmm0,[rsi+rcx-8]
-                movsd [rdi+rcx-8],xmm0
-            sub rcx,7
+                movsd xmm0,[arg2+RCX-8]
+                movsd [arg1+RCX-8],xmm0
+            sub RCX,7
             jmp TerminarCiclo
         NohacerXMM64:
-            cmp rcx,4
+            cmp RCX,4
             jb NohacerREG32
-                mov edx, dword [rsi+rcx-4]
-                mov [rdi+rcx-4],edx
-            sub rcx,3
+                mov edx, dword [arg2+RCX-4]
+                mov [arg1+RCX-4],edx
+            sub RCX,3
             jmp TerminarCiclo
         NohacerREG32:
-            cmp rcx,2
+            cmp RCX,2
             jb NohacerREG16
-                mov dx, word [rsi+rcx-2]
-                mov [rdi+rcx-2],dx
-            sub rcx,1
+                mov dx, word [arg2+RCX-2]
+                mov [arg1+RCX-2],dx
+            sub RCX,1
             jmp TerminarCiclo
         NohacerREG16:
-            mov dl, byte [rsi+rcx-1]
-            mov [rdi+rcx-1],dl
+            mov dl, byte [arg2+RCX-1]
+            mov [arg1+RCX-1],dl
         TerminarCiclo:
         loop Loopprincipal
     leave
+
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
+
     ret
+
 
 
 global CheckBit; char CheckBit(uint32_t INT32,uint8_t BIT);
@@ -74,13 +134,19 @@ global CheckBit; char CheckBit(uint32_t INT32,uint8_t BIT);
 ; It checks if a bit is set in a 32-bits value
 ;***************************************************************
 CheckBit:
+%ifidn __OUTPUT_FORMAT__, win64 
+    mov rax,rcx
+%endif
     enter 0,0
-    mov rcx,rsi
-    shr edi,cl
-    and edi,1
-    movzx rax,di
+    mov RCX,arg2
+    shr rax,cl
+    and rax,1
     leave
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
     ret
+
 
 global Buffer_16bits_ADD; 
 ;void Buffer_16bits_ADD(uint16_t * A_Result, uint16_t * B, uint64_t bytes)
@@ -89,48 +155,58 @@ global Buffer_16bits_ADD;
 ;**************************************************************************
 Buffer_16bits_ADD:
     enter 0,0
-    mov rcx,rdx
+
+%ifidn __OUTPUT_FORMAT__, win64 
+    mov RAX,RCX
+    %define arg1 RAX
+%endif
+
+    mov RCX,arg3
 
     LoopPrincipal:
-            cmp rcx,16
+            cmp RCX,16
             jb SumarEn64
-                movups xmm0,[rsi+rcx-16]
-                movups xmm1,[rdi+rcx-16]
+                movups xmm0,[arg2+RCX-16]
+                movups xmm1,[arg1+RCX-16]
                 paddsw xmm0,xmm1
-                movups [rdi+rcx-16],xmm0
-            sub rcx,15
+                movups [arg1+RCX-16],xmm0
+            sub RCX,15
 	    jmp TerminaLoopDeSumas16
 
 	SumarEn64:
-	    cmp rcx,8
+	    cmp RCX,8
 	    jb SumarEn32
-	        movsd xmm0,[rsi+rcx-8]
-                movsd xmm1,[rdi+rcx-8]
+	        movsd xmm0,[arg2+RCX-8]
+                movsd xmm1,[arg1+RCX-8]
                 paddsw xmm0,xmm1
-                movsd [rdi+rcx-8],xmm0
-	    sub rcx,7
+                movsd [arg1+RCX-8],xmm0
+	    sub RCX,7
 	    jmp TerminaLoopDeSumas16
 
 	SumarEn32:
-	    cmp rcx,4
+	    cmp RCX,4
 	    jb SumarEn16
-	        movss xmm0,[rsi+rcx-4]
-                movss xmm1,[rdi+rcx-4]
+	        movss xmm0,[arg2+RCX-4]
+                movss xmm1,[arg1+RCX-4]
                 paddsw xmm0,xmm1
-                movss [rdi+rcx-4],xmm0
-	    sub rcx,3
+                movss [arg1+RCX-4],xmm0
+	    sub RCX,3
 	    jmp TerminaLoopDeSumas16
 
 	SumarEn16:
-	    cmp rcx,2
+	    cmp RCX,2
 	    jb TerminaLoopDeSumas16
-		mov dx,[rsi+rcx-2]
-                add dx,[rdi+rcx-2]
-                mov  [rdi+rcx-2],dx
+		mov dx,[arg2+RCX-2]
+                add dx,[arg1+RCX-2]
+                mov  [arg1+RCX-2],dx
 
 	TerminaLoopDeSumas16:
         loop LoopPrincipal
     salida:
+
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
 
     leave
     ret
@@ -141,43 +217,53 @@ global Buffer_Clear; void ClearBuffer(void * Buffer_ptr,uint64_t Bytes)
 ; It clears (fills with zeroes) a buffer
 ;**********************************************
     Buffer_Clear:
+
+%ifidn __OUTPUT_FORMAT__, win64 
+    mov RAX,RCX
+    %define arg1 RAX
+%endif
+
     enter 0,0
 
     pxor xmm0,xmm0
-    xor rdx,rdx
-    mov rcx,rsi
+    xor arg3,arg3
+    mov RCX,arg2
 
     CBML:
-	cmp rcx,16
+	cmp RCX,16
 	jb CB8
-	    movups [rdi+rcx-16],xmm0
-	    sub rcx,15
+	    movups [arg1+RCX-16],xmm0
+	    sub RCX,15
 	jmp CBEND
 
     CB8:
-	cmp rcx,8
+	cmp RCX,8
 	jb CB4
-	    mov [rdi+rcx-8], rdx
-	    sub rcx,7
+	    mov [arg1+RCX-8], arg3
+	    sub RCX,7
 	jmp CBEND
 
     CB4:
-	cmp rcx,4
+	cmp RCX,4
 	jb CB2
-	    mov [rdi+rcx-4], edx
-	    sub rcx,3
+	    mov [arg1+RCX-4], edx
+	    sub RCX,3
 	jmp CBEND
     CB2:
-	cmp rcx,2
+	cmp RCX,2
 	jb CB1
-	    mov [rdi+rcx-2], dx
-	    sub rcx,1
+	    mov [arg1+RCX-2], dx
+	    sub RCX,1
 	jmp CBEND
     CB1:
-	mov [rdi],dl
+	mov [arg1],dl
 
     CBEND:
     loop CBML
+
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
 
     leave
     ret

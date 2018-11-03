@@ -7,7 +7,7 @@
 ; Extra arguments are pushed on the stack starting from the most left argument
 ; Function return value is returned this way:
 ; Integer value: RAX:RDX 
-; Float Point value: arg1f:arg2f
+; Float Point value: XMM0:XMM1
 ; RAX, R10 and R11 are volatile
 
 ; Microsoft x64 calling convention (Windows)
@@ -19,7 +19,7 @@
 ; Extra arguments are pushed on the stack 
 ; Function return value is returned this way:
 ; Integer value: RAX
-; Float Point value: arg1f
+; Float Point value: XMM0
 ; XMM4, XMM5, RAX, R10 and R11 are volatile
 
 ; SSE, SSE2, SSE3
@@ -896,6 +896,7 @@ global AxisAngleToQuaternion; AxisAngleToQuaternion(float * Axis, float Degree, 
 ;*********************************************************************
 %ifidn __OUTPUT_FORMAT__, win64 
     %define arg1f XMM1
+    %define arg2 R8
 %endif
 AxisAngleToQuaternion:
     enter 0,0
@@ -918,9 +919,9 @@ AxisAngleToQuaternion:
 
         fsin
         fstp dword[arg2]
-            movss arg2f,[arg2]
-            pshufd arg2f,arg2f,0h
-            mulps arg1f,arg2f
+            movss XMM3,[arg2]
+            pshufd XMM3,XMM3,0h
+            mulps arg1f,XMM3
             movups [arg2],arg1f
         fstp dword[arg2+4+4+4]
     leave

@@ -26,8 +26,9 @@
 
 ; Luis Delgado.
 
+;October 4, 2018:   Fixing Windows support, weird behavior @ V2ScalarMUL
+;October 2, 2018:   Adding Windows support.
 ;November 26, 2018: Date of last edition (before translation).
-;Octuber 2, 2018:   Adding Windows support.
 
 ; Collection of mathematical functions, very useful for algebra.
 
@@ -298,7 +299,8 @@ global V2ScalarMUL;V2ScalarMUL(float * Vec2_A, float Scalar_B, float * Vec2_Resu
 V2ScalarMUL:
 
 %ifidn __OUTPUT_FORMAT__, win64 
-    %define arg1 RDX
+    %define arg2 R8
+    %define arg1f XMM0 ;<- I don't know why it works, it should be XMM1, isn't it?
 %endif
     enter 0,0
     movsd arg2f, [arg1]

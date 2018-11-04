@@ -171,7 +171,7 @@ args_reset ;<--Sets arguments definitions to normal, as it's definitions can cha
 
 %macro DotProductXMM 4
 ;%1 and %2 are registers to proccess
-;%3 is the result
+;%3 is the result ;Result stored in the first 32-bits
 ;%4 is a temporal register
 	movaps %3, %1
 	mulps  %3, %2
@@ -179,6 +179,24 @@ args_reset ;<--Sets arguments definitions to normal, as it's definitions can cha
 	addps    %3,%4
 	movhlps  %4,%3
 	addss    %3,%4
+%endmacro
+
+%macro DotProductXMMV3 4
+;%1 and %2 are registers to proccess
+;%3 is the result ;Result stored in the first 32-bits
+;%4 is a temporal register
+	movaps %3, %1
+	;%3[?][z1][y1][z1]
+	mulps  %3, %2
+	;%3[?][z1*z2][y1*y2][x1*x2]
+	movshdup %4,%3
+	;%4[?][?]    [y1*y2][y1*y2]
+	addps    %4,%3
+	;%4[?][?]    [?]    [(x1*x2)+(y1*y2)]
+	movhlps  %3,%3
+	;%3[?][z1*z2][?]    [z1*z2]
+	addss    %3,%4
+	;%3[?][?]    [?]    [(x1*x2)+(y1*y2)+(z1*z2)]
 %endmacro
 
 %macro M4x4MULMACRO 2 ;When used, registers should be 0'd
@@ -1145,19 +1163,19 @@ enter 0,0
     ;xmm13 = s 
 
     ;calculate -( s . eye )
-    DotProductXMM xmm13,xmm9,xmm12,arg1f
+    DotProductXMMV3 xmm13,xmm9,xmm12,arg1f
     mulss xmm12,xmm8
     ;------------------------------;
 
     pop rax
 
     ;calculate -( u . eye )
-    DotProductXMM xmm14,xmm9,xmm11,arg1f
+    DotProductXMMV3 xmm14,xmm9,xmm11,arg1f
     mulss xmm11,xmm8
     ;------------------------------;
 
     ;calculate ( f . eye )
-    DotProductXMM xmm15,xmm9,xmm10,arg1f
+    DotProductXMMV3 xmm15,xmm9,xmm10,arg1f
     ;------------------------------;  
 
     ;do f=-f;
@@ -1176,7 +1194,6 @@ enter 0,0
 
     mulps xmm8,xmm8
     ;xmm8 = [1.f][1.f][1.f][1.f]
-
     movss xmm8,xmm10
     ;xmm8 = [1.f][1.f][1.f][+dot(f,eye)]
     movlhps xmm8,xmm8

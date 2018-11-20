@@ -1067,7 +1067,7 @@ OrthogonalProjectionMatrix4x4:
     pxor xmm5,xmm5
     pxor xmm6,xmm6
     movss xmm7,arg3f
-    mov arg2,fc_1f
+    mov rax,fc_1f
     divss arg3f,arg1f
     movss arg1f,xmm7
     divss xmm7,arg2f
@@ -1082,19 +1082,14 @@ OrthogonalProjectionMatrix4x4:
 ;xmm6 = -2
 ;xmm7 = 2/Height
 
-    movups [arg1],arg3f
-    pxor arg1f,arg1f
-    pshufd xmm7,xmm7,11_11_00_11b
-    divss xmm6,xmm4
-    movups [arg1+16],xmm7
-    pshufd xmm5,xmm5,11_00_11_11b
-    pshufd xmm6,xmm6,11_00_11_11b
-    movups [arg1+16+16],xmm6
+    movss [arg1],arg3f
+    movss [arg1+ (4*5)],xmm7
+    movss [arg1+ (4*10)],xmm6
 
     add rsp,8
 
-    movups [arg1+16+16+16],xmm5
-    mov [arg1+16+16+16+12],arg2
+    movss [arg1+ (4*14)],xmm5
+    mov [arg1+16+16+16+12],eax
 
     leave
 

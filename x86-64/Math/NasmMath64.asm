@@ -230,8 +230,8 @@ section .data
     fc_180fdivPI:              equ 0x42652ee1                         ;32-bits (180.f/PI)
 
 ;***** Variables *****;
-    fc_PIdiv180f_mem:           dd 0x3c8efa35                     ;32-bits (PI/180.f)
-
+    fc_PIdiv180f_mem:           dd 0x3c8efa35			    ;32-bits (PI/180.f)
+    fc_180fdivPI_mem:		dd 0x42652ee1			    ;32-bits (180.f/PI)  
 
 
 
@@ -241,6 +241,68 @@ section .data
 
 section .text
 
+global V2Distance; float V2Distance (float * Point_A, float * Point_B);
+;***************************************************************
+;It calculates de absolute distance between two 2D points.
+;***************************************************************
+V2Distance:	
+    enter 0,0
+	
+    movups  xmm0,[arg1]
+    movups  xmm1,[arg2]
+    subps   xmm1,xmm0
+    movups  xmm0,xmm1
+    mulps   xmm1,xmm0
+    movshdup xmm0,xmm1
+    addss   xmm0,xmm1
+    sqrtss  xmm0,xmm0
+
+    leave
+    ret
+
+global V2Degrees_FPU; void V2Degrees_FPU(float * Vec2D,float * Scalar_Result);
+;******************************************************************
+;It calculates the angle (in degrees) of a given vector Vec2D(X,Y).
+;The result is stored in the m32 given by Scalar_Result
+;Formula: Angle = Arctan(X/Y) * (180.f / PI)
+;******************************************************************
+V2Degrees_FPU:
+    enter 0,0
+    
+    fld dword [fc_180fdivPI_mem]
+    fld dword [arg1+4]
+    fld dword [arg1]
+    fpatan
+    fmulp
+    fstp dword [arg2] 
+
+    leave
+    ret
+
+global V2DegreesV2_FPU; void V2DegreesV2_FPU(float * Point_A, float * Point_B, float * Scalar);
+;*********************************************************************
+;Given two 2D point Point_A and Point_B.
+;It calculates the angle (in degrees) between them.
+;First it calculates a 2D point C = Point_B - Point A;
+;the it applies the same formula used in V2Degrees_FPU on C
+;*********************************************************************
+V2DegreesV2_FPU:
+    enter 0,0
+      
+    fld dword[fc_180fdivPI_mem]
+    fld dword[arg2+4];B.y
+    fld dword[arg1+4];A.y
+    fsubp 
+    fld dword[arg2];B.x
+    fld dword[arg1];A.x
+    fsubp
+
+    fpatan
+    fmulp
+    fstp dword[arg3] 
+    
+    leave
+    ret
 
 global V2Rotate_FPU; 
 ;void V2Rotate_FPU(float * Vec2_A, float * Angle_Degrees, float * Vec2_Result);

@@ -24,6 +24,8 @@
 
 ; SSE, SSE2, SSE3
 
+; December 12th, 2018:	First version
+
 ; Luis Delgado.
 
 
@@ -127,31 +129,8 @@ Check_2D_Point_in_3D_Triangle_no_Z:
     DotProductXMMV3 xmm4,xmm5,xmm2,xmm7
     ;xmm2 = PBC
     
-    MOVMSKPS xmm6,arg3
-    MOVMSKPS xmm2,arg4
+    MOVMSKPS 
 
-    xor arg4,arg3 ;<-- if 0 -> Equal, else -> Diff
-    and arg4,1 
-    cmp arg4,1
-    je final
-    
-    movsd xmm4,xmm0
-    subss xmm4,xmm3 ;xmm4=P-C
-    movsd xmm5,xmm1
-    subss xmm5,xmm3 ;xmm5=A-C
-    
-    DotProductXMMV3 xmm4,xmm5,xmm2,xmm7
-    ;xmm2 = PBC
-
-    MOVMSKPS xmm2,arg4
-    
-    xor arg4,arg3 ;<-- if 0 -> Equal, else -> Diff
-    and arg4,1 
-    cmp arg4,1
-    je final
-
-    inc RAX
-final:
     leave
     ret
 

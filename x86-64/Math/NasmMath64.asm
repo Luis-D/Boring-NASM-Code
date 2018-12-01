@@ -230,8 +230,8 @@ section .data
     fc_180fdivPI:              equ 0x42652ee1                         ;32-bits (180.f/PI)
 
 ;***** Variables *****;
-    fc_PIdiv180f_mem:           dd 0x3c8efa35                     ;32-bits (PI/180.f)
-
+    fc_PIdiv180f_mem:           dd 0x3c8efa35			    ;32-bits (PI/180.f)
+    fc_180fdivPI_mem:		dd 0x42652ee1			    ;32-bits (180.f/PI)  
 
 
 
@@ -241,6 +241,68 @@ section .data
 
 section .text
 
+global V2Distance; float V2Distance (float * Point_A, float * Point_B);
+;***************************************************************
+;It calculates de absolute distance between two 2D points.
+;***************************************************************
+V2Distance:	
+    enter 0,0
+	
+    movups  xmm0,[arg1]
+    movups  xmm1,[arg2]
+    subps   xmm1,xmm0
+    movups  xmm0,xmm1
+    mulps   xmm1,xmm0
+    movshdup xmm0,xmm1
+    addss   xmm0,xmm1
+    sqrtss  xmm0,xmm0
+
+    leave
+    ret
+
+global V2Degrees_FPU; void V2Degrees_FPU(float * Vec2D,float * Scalar_Result);
+;******************************************************************
+;It calculates the angle (in degrees) of a given vector Vec2D(X,Y).
+;The result is stored in the m32 given by Scalar_Result
+;Formula: Angle = Arctan(X/Y) * (180.f / PI)
+;******************************************************************
+V2Degrees_FPU:
+    enter 0,0
+    
+    fld dword [fc_180fdivPI_mem]
+    fld dword [arg1+4]
+    fld dword [arg1]
+    fpatan
+    fmulp
+    fstp dword [arg2] 
+
+    leave
+    ret
+
+global V2DegreesV2_FPU; void V2DegreesV2_FPU(float * Point_A, float * Point_B, float * Scalar);
+;*********************************************************************
+;Given two 2D point Point_A and Point_B.
+;It calculates the angle (in degrees) between them.
+;First it calculates a 2D point C = Point_B - Point A;
+;the it applies the same formula used in V2Degrees_FPU on C
+;*********************************************************************
+V2DegreesV2_FPU:
+    enter 0,0
+      
+    fld dword[fc_180fdivPI_mem]
+    fld dword[arg2+4];B.y
+    fld dword[arg1+4];A.y
+    fsubp 
+    fld dword[arg2];B.x
+    fld dword[arg1];A.x
+    fsubp
+
+    fpatan
+    fmulp
+    fstp dword[arg3] 
+    
+    leave
+    ret
 
 global V2Rotate_FPU; 
 ;void V2Rotate_FPU(float * Vec2_A, float * Angle_Degrees, float * Vec2_Result);
@@ -1085,7 +1147,7 @@ OrthogonalProjectionMatrix4x4:
     pxor xmm5,xmm5
     pxor xmm6,xmm6
     movss xmm7,arg3f
-    mov arg2,fc_1f
+    mov rax,fc_1f
     divss arg3f,arg1f
     movss arg1f,xmm7
     divss xmm7,arg2f
@@ -1100,19 +1162,15 @@ OrthogonalProjectionMatrix4x4:
 ;xmm6 = -2
 ;xmm7 = 2/Height
 
-    movups [arg1],arg3f
-    pxor arg1f,arg1f
-    pshufd xmm7,xmm7,11_11_00_11b
-    divss xmm6,xmm4
-    movups [arg1+16],xmm7
-    pshufd xmm5,xmm5,11_00_11_11b
-    pshufd xmm6,xmm6,11_00_11_11b
-    movups [arg1+16+16],xmm6
+    movss [arg1],arg3f
+    movss [arg1+ (4*5)],xmm7
+    movss [arg1+ (4*10)],xmm6
+
 
     add rsp,8
 
-    movups [arg1+16+16+16],xmm5
-    mov [arg1+16+16+16+12],arg2
+    movss [arg1+ (4*14)],xmm5
+    mov [arg1+16+16+16+12],eax
 
     leave
 

@@ -97,7 +97,7 @@ Triangle_3D_Baricenter:
     leave
     ret
 
-global Check_2D_Point_in_Triangle; char Check_2D_Point_in_Triangle(float * Triangle, float * 2D_Point);
+global Check_2D_Point_in_3D_Triangle_no_Z; char Check_2D_Point_in_Triangle(float * Triangle, float * 2D_Point);
 ;***************
 ;Given a 3D Triangle and a 2D Point,
 ;this algorithm returns 1 if the point is inside the Triangle boundaries

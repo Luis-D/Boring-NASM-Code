@@ -470,6 +470,24 @@ V2V2Dot:
     leave
     ret
     
+global V3V3Dot; float DotProduct = V3V3Dot (float * Vec3_A, float * Vec3_B);
+;**********************************************
+;Given A and B 3D Vectors,
+;it returns (A . B)
+;**********************************************
+V3V3Dot:
+    enter 0,0
+    movsd arg3f,[arg1]
+    movss arg1f, [arg1+(4*2)]
+    movlhps arg3f,arg1f
+    movsd arg2f,[arg2]
+    movss arg1f, [arg2+(4*2)]
+    movlhps arg2f,arg1f
+
+    DotProductXMMV3 arg3f,arg2f,arg1f,arg4f
+    
+    leave
+    ret
 
 global M4x4MUL ;(float * A, float *B, float * Result);
 ;**********************************************

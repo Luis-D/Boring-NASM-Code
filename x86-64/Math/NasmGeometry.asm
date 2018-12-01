@@ -1,0 +1,159 @@
+; To be used with NASM-Compatible Assemblers
+
+; System V AMD64 ABI Convention (*nix)
+; Function parameters are passed this way:
+; Interger values: RDI, RSI, RDX, RCX, R8, R9
+; Float Point values: XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7
+; Extra arguments are pushed on the stack starting from the most left argument
+; Function return value is returned this way:
+; Integer value: RAX:RDX 
+; Float Point value: XMM0:XMM1
+; RAX, R10 and R11 are volatile
+
+; Microsoft x64 calling convention (Windows)
+; Function parameters are passed this way:
+; Interger values: RCX, RDX, R8, R9
+; Float Point values: XMM0, XMM1, XMM2, XMM3 
+; Both kind of arguments are counted together
+; e.g. if the second argument is a float, it will be in arg2f, if Interger, then RDX
+; Extra arguments are pushed on the stack 
+; Function return value is returned this way:
+; Integer value: RAX
+; Float Point value: XMM0
+; XMM4, XMM5, RAX, R10 and R11 are volatile
+
+; SSE, SSE2, SSE3
+
+; Luis Delgado.
+
+
+; Collection of mathematical functions, very useful for geometry.
+
+
+%ifndef _NASMGEOMETRY_ASM_
+%define _NASMGEOMETRY_ASM_
+
+%include "NasmMath.asm"
+
+;*****************************
+;MACROS
+;*****************************
+
+%ifidn __OUTPUT_FORMAT__, elf64 
+%elifidn __OUTPUT_FORMAT__, win64
+%endif
+
+%ifidn __OUTPUT_FORMAT__, win64 
+%endif
+
+args_reset ;<--Sets arguments definitions to normal, as it's definitions can change.
+
+;********************************************************************
+; .data
+;********************************************************************
+
+fc_3f_mem: dd 01000000010000000000000000000000b; 3.0f;
+
+;********************************
+; CODE
+;********************************
+
+section .text
+
+global Triangle_3D_Baricenter; Triangle_3D_Baricenter(float*Triangle,float*Result);
+;************************
+;Given a triangle Triangle described by and array of 3 3D points (3 floats per point)
+;this algorithm calculates its baricenter and returns and array of 3 3D points in Result
+;************************
+Triangle_3D_Baricenter:
+    enter 0,0    
+    movups XMM0,[arg1]
+    add arg1,(4*3) ;<- It jumps three times the size of a float (4 bytes)
+    movups XMM1,[arg1]
+    add arg1,(4*2) ;<- It jumps two times the size of a float because of memory boundaries
+    movups XMM2,[arg1] 
+    movss XMM3,fc_3f_mem
+    ;xmm0 [Bx][Az][Ay][Ax]
+    ;xmm1 [Cx][Bz][By][Bx]
+    ;xmm2 [Cz][Cy][Cx][Bz]  ;<- It needs some alingment
+    ;xmm3 [??][??][??][3.0f];<- It needs to be in all sections
+    psrldq XMM2,4    
+    pshufd xmm3,xmm3,0
+    ;xmm0 [Bx][Az][Ay][Ax]
+    ;xmm1 [Cx][Bz][By][Bx]
+    ;xmm2 [??][Cz][Cy][Cx] :<- it's aligned now
+    ;xmm3 [?][3.0f][3.0f][3.0f]
+    addps xmm0,xmm1
+    addps xmm1,xmm2
+    divps xmm0,xmm3
+    movhlps xmm1,xmm0
+    ;xmm0 [??][Rz][Ry][Rx]
+    ;xmm1 [??][??][??][Rz]
+    movsd [arg2],xmm0
+    add arg2,(4*2)
+    movss [arg2],xmm1
+    leave
+    ret
+
+global Check_2D_Point_in_Triangle; char Check_2D_Point_in_Triangle(float * Triangle, float * 2D_Point);
+;***************
+;Given a 3D Triangle and a 2D Point,
+;this algorithm returns 1 if the point is inside the Triangle boundaries
+;The Z of the triangle vertices are ignored.
+;else, this algoritm returns 0 
+;***************
+Check_2D_Point_in_3D_Triangle_no_Z:
+    enter 0,0
+    xor RAX,RAX
+   
+    movsd xmm0,[arg2]		    ;(P.x,P.y)
+    movsd xmm1,[arg1]		    ;(A.x,A.y)
+    movsd xmm2,[arg1+(4*3)]	    ;(B.x,B.y)
+    movsd xmm3,[arg1+(4*3)+(4*3)]   ;(C.x,C.y)
+
+    movsd xmm4,xmm0
+    subss xmm4,xmm1 ;xmm4=P-A
+    movsd xmm5,xmm2
+    subss xmm5,xmm1 ;xmm5=B-A
+
+    DotProductXMMV3 xmm4,xmm5,xmm6,xmm7
+    ;xmm6 = PAB
+ 
+    movsd xmm4,xmm0
+    subss xmm4,xmm2 ;xmm4=P-B
+    movsd xmm5,xmm3
+    subss xmm5,xmm2 ;xmm5=C-B
+
+    DotProductXMMV3 xmm4,xmm5,xmm2,xmm7
+    ;xmm2 = PBC
+    
+    MOVMSKPS xmm6,arg3
+    MOVMSKPS xmm2,arg4
+
+    xor arg4,arg3 ;<-- if 0 -> Equal, else -> Diff
+    and arg4,1 
+    cmp arg4,1
+    je final
+    
+    movsd xmm4,xmm0
+    subss xmm4,xmm3 ;xmm4=P-C
+    movsd xmm5,xmm1
+    subss xmm5,xmm3 ;xmm5=A-C
+    
+    DotProductXMMV3 xmm4,xmm5,xmm2,xmm7
+    ;xmm2 = PBC
+
+    MOVMSKPS xmm2,arg4
+    
+    xor arg4,arg3 ;<-- if 0 -> Equal, else -> Diff
+    and arg4,1 
+    cmp arg4,1
+    je final
+
+    inc RAX
+final:
+    leave
+    ret
+
+
+%endif

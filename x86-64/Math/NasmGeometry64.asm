@@ -35,7 +35,7 @@
 %ifndef _NASMGEOMETRY_ASM_
 %define _NASMGEOMETRY_ASM_
 
-%include "NasmMath.asm"
+%include "NasmMath64.asm" ; Compile with -i 
 
 ;*****************************
 ;MACROS
@@ -74,7 +74,7 @@ Triangle_3D_Baricenter:
     movups XMM1,[arg1]
     add arg1,(4*2) ;<- It jumps two times the size of a float because of memory boundaries
     movups XMM2,[arg1] 
-    movss XMM3,fc_3f_mem
+    movss XMM3, [fc_3f_mem]
     ;xmm0 [Bx][Az][Ay][Ax]
     ;xmm1 [Cx][Bz][By][Bx]
     ;xmm2 [Cz][Cy][Cx][Bz]  ;<- It needs some alingment
@@ -109,7 +109,7 @@ Triangle_2D_Baricenter:
     movsd XMM1,[arg1]
     add arg1,(4*2) ;<- It jumps two times the size of a float because of memory boundaries
     movsd XMM2,[arg1] 
-    movss XMM3,fc_3f_mem
+    movss XMM3, [fc_3f_mem]
     ;xmm0 [??][??][Ay][Ax]
     ;xmm1 [??][??][By][Bx]
     ;xmm2 [??][??][Cx][Bz]  

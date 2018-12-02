@@ -54,7 +54,7 @@ args_reset ;<--Sets arguments definitions to normal, as it's definitions can cha
 ; .data
 ;********************************************************************
 
-fc_3f_mem: dd 01000000010000000000000000000000b; 3.0f;
+fc_3f_mem: dd 01000000010000000000000000000000b ; 3.0f;
 
 ;********************************
 ; CODE
@@ -65,7 +65,7 @@ section .text
 global Triangle_3D_Baricenter; Triangle_3D_Baricenter(float*Triangle,float*Result);
 ;************************
 ;Given a triangle Triangle described by and array of 3 3D points (3 floats per point)
-;this algorithm calculates its baricenter and returns and array of 3 3D points in Result
+;this algorithm calculates its baricenter and returns and array of a 3D point in Result
 ;************************
 Triangle_3D_Baricenter:
     enter 0,0    
@@ -97,14 +97,41 @@ Triangle_3D_Baricenter:
     leave
     ret
 
-global Check_2D_Point_in_3D_Triangle_no_Z; char Check_2D_Point_in_Triangle(float * Triangle, float * 2D_Point);
+global Triangle_2D_Baricenter; Triangle_2D_Baricenter(float*Triangle,float*Result);
+;************************
+;Given a triangle Triangle described by and array of 3 2D points (2 floats per point)
+;this algorithm calculates its baricenter and returns and array of a 2D point in Result
+;************************
+Triangle_2D_Baricenter:
+    enter 0,0    
+    movsd XMM0,[arg1]
+    add arg1,(4*2) ;<- It jumps two times the size of a float (4 bytes)
+    movsd XMM1,[arg1]
+    add arg1,(4*2) ;<- It jumps two times the size of a float because of memory boundaries
+    movsd XMM2,[arg1] 
+    movss XMM3,fc_3f_mem
+    ;xmm0 [??][??][Ay][Ax]
+    ;xmm1 [??][??][By][Bx]
+    ;xmm2 [??][??][Cx][Bz]  
+    ;xmm3 [??][??][??][3.0f];<- It needs to be in all sections
+    movsldup xmm3,xmm3
+    ;xmm3 [?][?][3.0f][3.0f]
+    addps xmm0,xmm1
+    addps xmm1,xmm2
+    divps xmm0,xmm3
+    ;xmm0 [??][??][Ry][Rx]
+    movsd [arg2],xmm0
+    leave
+    ret
+
+
+global Check_Point_in_Triangle_2D; char Check_2D_Point_in_Triangle(float * 2D_Triangle, float * 2D_Point);
 ;***************
-;Given a 3D Triangle and a 2D Point,
+;Given a 2D Triangle and a 2D Point,
 ;this algorithm returns 1 if the point is inside the Triangle boundaries
-;The Z of the triangle vertices are ignored.
 ;else, this algoritm returns 0 
 ;***************
-Check_2D_Point_in_3D_Triangle_no_Z:
+Check_Point_in_Triangle_2D:
     enter 0,0
     xor RAX,RAX
    
@@ -118,7 +145,7 @@ Check_2D_Point_in_3D_Triangle_no_Z:
     movsd xmm5,xmm2
     subss xmm5,xmm1 ;xmm5=B-A
 
-    DotProductXMMV3 xmm4,xmm5,xmm6,xmm7
+    DotProductXMMV2 xmm4,xmm5,xmm6,xmm7
     ;xmm6 = PAB
  
     movsd xmm4,xmm0
@@ -126,11 +153,37 @@ Check_2D_Point_in_3D_Triangle_no_Z:
     movsd xmm5,xmm3
     subss xmm5,xmm2 ;xmm5=C-B
 
-    DotProductXMMV3 xmm4,xmm5,xmm2,xmm7
+    DotProductXMMV2 xmm4,xmm5,xmm2,xmm7
     ;xmm2 = PBC
     
-    MOVMSKPS 
+    MOVMSKPS arg1,xmm6
+    MOVMSKPS arg2,xmm2
 
+    and arg1,1 ; 1 = Negative, 0 = Positive
+    and arg2,1 ; 1 = Negative, 0 = Positive
+    cmp arg1,arg2 
+    jne final
+
+    
+    movsd xmm4,xmm0
+    subss xmm4,xmm3 ;xmm4=P-C
+    movsd xmm5,xmm1
+    subss xmm5,xmm3 ;xmm5=A-C
+
+    DotProductXMMV2 xmm4,xmm5,xmm2,xmm7
+    ;xmm2 = PCA
+
+    MOVMSKPS arg2,xmm2
+
+    and arg1,1 ; 1 = Negative, 0 = Positive
+    and arg2,1 ; 1 = Negative, 0 = Positive
+    cmp arg1,arg2 
+    jne final
+
+    neg RAX
+    shr RAX,63
+
+final:
     leave
     ret
 

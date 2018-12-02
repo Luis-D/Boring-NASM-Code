@@ -201,6 +201,16 @@ args_reset ;<--Sets arguments definitions to normal, as it's definitions can cha
 	;%3[?][?]    [?]    [(x1*x2)+(y1*y2)+(z1*z2)]
 %endmacro
 
+%macro DotProductXMMV2 4
+;%1 and %2 are registers to proccess
+;%3 is the result ;Result stored in the first 32-bits
+;%4 is a temporal register
+	movsd %3, %1
+	mulps  %3, %2
+	movshdup %4,%3
+	addss    %3,%4
+%endmacro
+
 %macro M4x4MULMACRO 2 ;When used, registers should be 0'd
     DotProductXMM arg4f,%1,xmm8,xmm9
     pshufd xmm10,xmm8,0

@@ -117,7 +117,7 @@ Triangle_2D_Baricenter:
     movsldup xmm3,xmm3
     ;xmm3 [?][?][3.0f][3.0f]
     addps xmm0,xmm1
-    addps xmm1,xmm2
+    addps xmm0,xmm2
     divps xmm0,xmm3
     ;xmm0 [??][??][Ry][Rx]
     movsd [arg2],xmm0

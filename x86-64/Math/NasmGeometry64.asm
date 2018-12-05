@@ -24,7 +24,8 @@
 
 ; SSE, SSE2, SSE3
 
-; December 12th, 2018:	First version
+; December 2th, 2018:	First version
+; December 3th, 2018:	New function added.
 
 ; Luis Delgado.
 

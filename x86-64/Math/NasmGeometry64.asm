@@ -187,5 +187,13 @@ final:
     leave
     ret
 
+global Check_Segment_vs_Segment_2D; int Check_Segment_vs_Segment(float * Seg_A, float * Seg_B, float * T);
+Check_Segment_vs_Segment_2D:
+    enter 0,0    
+
+_final:
+    leave
+    ret
+
 
 %endif

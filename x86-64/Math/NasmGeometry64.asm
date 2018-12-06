@@ -26,6 +26,7 @@
 
 ; December 2th, 2018:	First version
 ; December 3th, 2018:	New function added.
+; December 6th, 2018:	Check_Segment_vs_Segment_2D fixed
 
 ; Luis Delgado.
 
@@ -51,11 +52,26 @@
 
 args_reset ;<--Sets arguments definitions to normal, as it's definitions can change.
 
+%macro CROSSPRODUCTV2 4
+;%1 and %2 Registers to operate with
+;%3 Register where to store the result
+;%4 Temporal register
+;v = %1; w = %2
+
+pshufd %4,%2,00000001b
+movsd %3,%1
+mulps %3,%4
+movshdup %4, %3
+subss %3,%4
+
+%endmacro
+
 ;********************************************************************
 ; .data
 ;********************************************************************
 
 fc_3f_mem: dd 01000000010000000000000000000000b ; 3.0f;
+fc_1f_mem: dd 0x3f800000;1.0f;
 
 ;********************************
 ; CODE
@@ -188,5 +204,92 @@ final:
     leave
     ret
 
+global Check_Segment_vs_Segment_2D
+;char Check_Segment_vs_Segment_2D(float * Seg_A, float * Seg_B, float * Time_Return);
+;Seg_A = Q -> S
+;Seg_B = P -> R
+Check_Segment_vs_Segment_2D:
+    enter 0,0
+    
+    xor RAX,RAX
+
+    movsd xmm0,[arg2]	;xmm0=Q
+    movsd xmm2,[arg1]	;xmm2=P
+    add arg2,8    
+    movsd xmm1,[arg2]	;xmm1=S
+    add arg1,8
+    subps xmm0,xmm2	;xmm0 = Q-P
+    movsd xmm3,[arg1]   ;xmm3 = R
+
+    CROSSPRODUCTV2 xmm0,xmm1,xmm2,xmm4
+    ;xmm2 = (Q-P) x S
+    
+    CROSSPRODUCTV2 xmm3,xmm1,xmm4,xmm5
+    ;xmm4 = (R x S)
+
+    CROSSPRODUCTV2 xmm0,xmm3,xmm1,xmm5
+    ;xmm1 = (Q-P) x R
+  
+ 
+%if 1
+ 
+    sub rsp,8
+    movss [rsp],xmm4
+    mov eax,[rsp]
+
+    divss xmm2,xmm4;xmm2 = t = (Q-P) x S / (R x S)
+    
+
+    divss xmm1,xmm4;xmm1 = u = (Q-P) x R / (R x S)
+   
+    movss xmm0,xmm2;<- save xmm1 to return
+
+    movlhps xmm1,xmm2
+    ;xmm1 = [?][t][?][u]
+    pshufd xmm1,xmm1,10_0_10_00b
+
+    cmp eax,0
+    je final 
+    
+    sub rsp,8
+
+    pxor xmm2,xmm2
+    movss xmm3,[fc_1f_mem]
+    pshufd xmm3,xmm3,0
+   
+    ;movups [arg3],xmm1
+
+    cmpps xmm2,xmm1,2 ;xmm2= if 0 <= xmm1    
+    cmpps xmm1,xmm3,2 ;xmm1= if xmm1 <= 1.f
+
+    ;movups [arg3],xmm2
+
+    movlhps xmm2,xmm1
+    ;xmm2 [t<1.f][u<1.f][0<t][0<u]
+
+    ;movups [arg3],xmm2    
+    
+    movups [rsp],xmm2
+    mov arg1,[rsp]
+    add rsp,8
+    mov arg2,[rsp]
+    add rsp,8
+    
+    mov arg4,0xFFFFFFFFFFFFFFFF
+
+    cmp arg1,arg4
+    jne _final
+    cmp arg2,arg4
+    jne _final
+
+    mov eax,1
+    cmp arg3,0
+    je _final
+    movss [arg3],xmm2
+%endif
+   
+_final:
+    leave
+    ret
 
 %endif

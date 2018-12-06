@@ -30,7 +30,6 @@
 
 ; Luis Delgado.
 
-
 ; Collection of mathematical functions, very useful for geometry.
 
 

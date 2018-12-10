@@ -215,10 +215,12 @@ Check_Segment_vs_Segment_2D:
     movsd xmm0,[arg2]	;xmm0=Q
     movsd xmm2,[arg1]	;xmm2=P
     add arg2,8    
-    movsd xmm1,[arg2]	;xmm1=S
+    movsd xmm1,[arg2]	;xmm1=Q+S
+    subps xmm1,xmm0     ;xmm1=Q
     add arg1,8
     subps xmm0,xmm2	;xmm0 = Q-P
-    movsd xmm3,[arg1]   ;xmm3 = R
+    movsd xmm3,[arg1]   ;xmm3 = P+R
+    subps xmm3,xmm2     ;xmm3 = P
 
     CROSSPRODUCTV2 xmm0,xmm1,xmm2,xmm4
     ;xmm2 = (Q-P) x S
@@ -241,14 +243,15 @@ Check_Segment_vs_Segment_2D:
 
     divss xmm1,xmm4;xmm1 = u = (Q-P) x R / (R x S)
    
-    movss xmm0,xmm2;<- save xmm1 to return
+    movss xmm0,xmm2;<- save to return
 
     movlhps xmm1,xmm2
     ;xmm1 = [?][t][?][u]
     pshufd xmm1,xmm1,10_0_10_00b
 
     cmp eax,0
-    je final 
+    je _final 
+    mov rax,0
     
     sub rsp,8
 
@@ -284,7 +287,7 @@ Check_Segment_vs_Segment_2D:
     mov eax,1
     cmp arg3,0
     je _final
-    movss [arg3],xmm2
+    movss [arg3],xmm0
 %endif
    
 _final:

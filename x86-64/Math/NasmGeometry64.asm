@@ -27,6 +27,7 @@
 ; December 2th, 2018:	First version
 ; December 3th, 2018:	New function added.
 ; December 6th, 2018:	Check_Segment_vs_Segment_2D fixed
+; December 12th, 2018:	"Baricenter" -> "Barycenter"
 
 ; Luis Delgado.
 
@@ -78,12 +79,12 @@ fc_1f_mem: dd 0x3f800000;1.0f;
 
 section .text
 
-global Triangle_3D_Baricenter; Triangle_3D_Baricenter(float*Triangle,float*Result);
+global Triangle_3D_Barycenter; Triangle_3D_Barycenter(float*Triangle,float*Result);
 ;************************
 ;Given a triangle Triangle described by and array of 3 3D points (3 floats per point)
-;this algorithm calculates its baricenter and returns and array of a 3D point in Result
+;this algorithm calculates its barycenter and returns and array of a 3D point in Result
 ;************************
-Triangle_3D_Baricenter:
+Triangle_3D_Barycenter:
     enter 0,0    
     movups XMM0,[arg1]
     add arg1,(4*3) ;<- It jumps three times the size of a float (4 bytes)
@@ -113,12 +114,12 @@ Triangle_3D_Baricenter:
     leave
     ret
 
-global Triangle_2D_Baricenter; Triangle_2D_Baricenter(float*Triangle,float*Result);
+global Triangle_2D_Barycenter; Triangle_2D_Barycenter(float*Triangle,float*Result);
 ;************************
 ;Given a triangle Triangle described by and array of 3 2D points (2 floats per point)
-;this algorithm calculates its baricenter and returns and array of a 2D point in Result
+;this algorithm calculates its barycenter and returns and array of a 2D point in Result
 ;************************
-Triangle_2D_Baricenter:
+Triangle_2D_Barycenter:
     enter 0,0    
     movsd XMM0,[arg1]
     add arg1,(4*2) ;<- It jumps two times the size of a float (4 bytes)

@@ -28,6 +28,7 @@
 ; December 3th, 2018:	New function added.
 ; December 6th, 2018:	Check_Segment_vs_Segment_2D fixed
 ; December 12th, 2018:	"Baricenter" -> "Barycenter"
+; December 14th, 2018:	Offset capability ti Check_Point_in_Triangle_2D added
 
 ; Luis Delgado.
 
@@ -141,12 +142,62 @@ Triangle_2D_Barycenter:
     leave
     ret
 
+global Check_Point_in_Segment_2D; char Check_Point_in_Segment_2D(float * Segment, float * 2D_Point)
+Check_Point_in_Segment_2D:
+    enter 0,0
+    xor RAX,RAX    
+    
+    movsd xmm0,[arg2]		    ;(P.x,P.y)
+    movsd xmm1,[arg1]		    ;(A.x,A.y)
+    movsd xmm2,[arg1+(4*2)]	    ;(B.x,B.y)
+    pxor xmm3,xmm3
 
-global Check_Point_in_Triangle_2D; char Check_2D_Point_in_Triangle(float * 2D_Triangle, float * 2D_Point);
+    movsd xmm4,xmm0
+    subps xmm4,xmm1 ;xmm4=P-A
+    movsd xmm5,xmm2
+    subps xmm5,xmm1 ;xmm5=B-A
+
+
+    CROSSPRODUCTV2 xmm4,xmm5,xmm0,xmm7
+    ;xmm0 = AP x AB
+
+    DotProductXMMV2 xmm5,xmm4,xmm1,xmm7
+    ;xmm1 = AB . AP
+    
+    DotProductXMMV2 xmm5,xmm5,xmm2,xmm7
+    ;xmm2 = AB . AB
+    
+    cmpss xmm0,xmm3,0 ;xmm0= if xmm0 = 0
+    cmpss xmm3,xmm1,2 ;xmm3= if 0 <= xmm1    
+    cmpss xmm1,xmm2,2 ;xmm1= if xmm1 <= xmm2
+	
+    andps xmm1,xmm3
+    andps xmm0,xmm1
+
+    sub rsp,8
+    movss [rsp],xmm0
+    mov eax,[rsp]
+    add rsp,8
+
+    cmp eax,0xFFFFFFFF
+    je __set1 
+
+    xor rax,rax
+    jmp __final
+
+__set1:
+    mov rax,1
+
+__final:
+    leave
+    ret
+
+global Check_Point_in_Triangle_2D; char Check_Point_in_Triangle_2D(float * 2D_Triangle, float * 2D_Point,int bytes_offset);
 ;***************
 ;Given a 2D Triangle and a 2D Point,
 ;this algorithm returns 1 if the point is inside the Triangle boundaries
-;else, this algoritm returns 0 
+;else, this algoritm returns 0
+;The offset can be used if the triangle vertices elements are interleaved with something else 
 ;***************
 Check_Point_in_Triangle_2D:
     enter 0,0
@@ -154,52 +205,54 @@ Check_Point_in_Triangle_2D:
    
     movsd xmm0,[arg2]		    ;(P.x,P.y)
     movsd xmm1,[arg1]		    ;(A.x,A.y)
-    movsd xmm2,[arg1+(4*3)]	    ;(B.x,B.y)
-    movsd xmm3,[arg1+(4*3)+(4*3)]   ;(C.x,C.y)
+    add arg1,arg3
+    movsd xmm2,[arg1+(4*2)]	    ;(B.x,B.y)
+    add arg1,arg3
+    movsd xmm3,[arg1+(4*2)+(4*2)]   ;(C.x,C.y)
 
     movsd xmm4,xmm0
-    subss xmm4,xmm1 ;xmm4=P-A
+    subps xmm4,xmm1 ;xmm4=P-A
     movsd xmm5,xmm2
-    subss xmm5,xmm1 ;xmm5=B-A
+    subps xmm5,xmm1 ;xmm5=B-A
 
-    DotProductXMMV2 xmm4,xmm5,xmm6,xmm7
+    CROSSPRODUCTV2 xmm5,xmm4,xmm6,xmm7
     ;xmm6 = PAB
+
  
     movsd xmm4,xmm0
-    subss xmm4,xmm2 ;xmm4=P-B
+    subps xmm4,xmm2 ;xmm4=P-B
     movsd xmm5,xmm3
-    subss xmm5,xmm2 ;xmm5=C-B
+    subps xmm5,xmm2 ;xmm5=C-B
 
-    DotProductXMMV2 xmm4,xmm5,xmm2,xmm7
+    CROSSPRODUCTV2 xmm5,xmm4,xmm2,xmm7
     ;xmm2 = PBC
     
+    movsd xmm4,xmm0
+    subps xmm4,xmm3 ;xmm4=P-C
+    movsd xmm5,xmm1
+    subps xmm5,xmm3 ;xmm5=A-C
+
+    CROSSPRODUCTV2 xmm5,xmm4,xmm3,xmm7
+    ;xmm3 = PCA
+
+    xor arg1,arg1
+    xor arg2,arg2
+    xor arg3,arg3
+    
+    pxor xmm0,xmm0
+    MOVMSKPS arg3,xmm3
     MOVMSKPS arg1,xmm6
     MOVMSKPS arg2,xmm2
 
     and arg1,1 ; 1 = Negative, 0 = Positive
     and arg2,1 ; 1 = Negative, 0 = Positive
+    and arg3,1 ; 1 = Negative, 0 = Positive
     cmp arg1,arg2 
     jne final
-
-    
-    movsd xmm4,xmm0
-    subss xmm4,xmm3 ;xmm4=P-C
-    movsd xmm5,xmm1
-    subss xmm5,xmm3 ;xmm5=A-C
-
-    DotProductXMMV2 xmm4,xmm5,xmm2,xmm7
-    ;xmm2 = PCA
-
-    MOVMSKPS arg2,xmm2
-
-    and arg1,1 ; 1 = Negative, 0 = Positive
-    and arg2,1 ; 1 = Negative, 0 = Positive
-    cmp arg1,arg2 
+    cmp arg1,arg3
     jne final
 
-    neg RAX
-    shr RAX,63
-
+    mov rax,1 
 final:
     leave
     ret

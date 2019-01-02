@@ -26,9 +26,14 @@
 
 ; Luis Delgado.
 
-;October 4, 2018:   Fixing Windows support, weird behavior @ V2ScalarMUL
+;December 1, 2019:  Added Linear Interpolation
+;December 29,2018:  Fixed Inverted Rotation @ QuaternionToMatrix4x4. 
+;		    Added Rotation by Quaternion.
+;		    Added 3D Vector multiplication by 3D vector
+;October 4, 2018:   Fixing Windows support, weird behavior @ V2ScalarMUL.
 ;October 2, 2018:   Adding Windows support.
 ;November 26, 2018: Date of last edition (before translation).
+
 
 ; Collection of mathematical functions, very useful for algebra.
 
@@ -73,19 +78,21 @@
 args_reset ;<--Sets arguments definitions to normal, as it's definitions can change.
 
 %macro TRANS44 0
-    movaps  xmm4,  arg1f
-    movaps  xmm6,  arg3f
+; Result in XMM0:XMM2:XMM4:XMM5
 
-    punpckldq arg1f,arg2f
-    punpckldq arg3f,arg4f
-    punpckhdq xmm4,arg2f
-    punpckhdq xmm6,arg4f
+    movaps  xmm4,  xmm0
+    movaps  xmm6,  xmm2
 
-    movaps  arg2f,arg1f
+    punpckldq xmm0,xmm1
+    punpckldq xmm2,xmm3
+    punpckhdq xmm4,xmm1
+    punpckhdq xmm6,xmm3
+
+    movaps  xmm1,xmm0
     movaps  xmm5,xmm4
 
-    punpcklqdq arg1f,arg3f
-    punpckhqdq arg2f,arg3f
+    punpcklqdq xmm0,xmm2
+    punpckhqdq xmm1,xmm2
     punpcklqdq xmm4,xmm6
     punpckhqdq xmm5,xmm6
 %endmacro
@@ -135,6 +142,7 @@ args_reset ;<--Sets arguments definitions to normal, as it's definitions can cha
 %endmacro 
 
 %macro MULVEC4VEC4 3
+;Multiplies XMM0:XMM1:XMM4:XMM5 by XMM2:XMM3:XMM6:XMM7
         movups arg3f,[%1+%3]
         movaps xmm7,arg3f
 
@@ -271,6 +279,26 @@ V2Distance:
     leave
     ret
 
+
+global V3V3MUL; void V3V3MUL(void * Vec3_A, void * Vec3_B, void * Result)
+;***********************************************
+;Given two 3D vectors,
+;this algorithm multiplies their components.
+;The result is then stored in the buffer Result
+;***********************************************
+V3V3MUL:
+    enter 0,0
+    movsd xmm0,[arg1]
+    movsd xmm1,[arg2]
+    mulps xmm0,xmm1
+    movsd [arg3],xmm0
+    movss xmm0,[arg1+4+4]
+    movss xmm1,[arg2+4+4]
+    mulss xmm0,xmm1
+    movss [arg3+4+4],xmm0
+    leave 
+    ret
+
 global V2Degrees_FPU; void V2Degrees_FPU(float * Vec2D,float * Scalar_Result);
 ;******************************************************************
 ;It calculates the angle (in degrees) of a given vector Vec2D(X,Y).
@@ -314,6 +342,51 @@ V2DegreesV2_FPU:
     
     leave
     ret
+
+global QuaternionRotateV3; void QuaternionRotateV3(void * Quaternion, void * Vec3, void * Result)
+;********************************************************************
+;Given a Quaternion and a 3D Vector,
+;this algoritm rotates the 3D vector around origin by the quaternion
+;********************************************************************
+QuaternionRotateV3:
+    enter 0,0
+    movups xmm0, [arg1]	    ;<- xmm0 stores the imaginary part of the Quaternion
+    movss xmm1,[arg1+4+4+4] ;<- xmm1 stores the real part of the Quaternion
+    movsd xmm2,[arg2]    
+    movss xmm3,[arg2+4+4]
+    movlhps xmm2,xmm3	    ;<- xmm2 stores the 3D vector
+    
+    DotProductXMMV3 xmm0,xmm2,xmm3,xmm4; <-xmm3 stores xmm0 . xmm2
+    addss xmm3,xmm3 ;<- xmm3 * 2.f
+    movaps xmm6,xmm0
+    DotProductXMMV3 xmm0,xmm6,xmm5,xmm4; <-xmm5 stores xmm0 . xmm0 
+    movss xmm4,xmm1
+    mulss xmm4,xmm4
+    subss xmm4,xmm5 ;<- (xmm1*xmm1) - xmm5
+
+    pshufd xmm3,xmm3,0
+    mulps xmm3,xmm0
+
+    pshufd xmm4,xmm4,0
+    mulps xmm4,xmm2
+
+    addps xmm4,xmm3
+
+    CROSSPRODUCTMACRO xmm0,xmm2,xmm3,xmm5,xmm6,xmm7 ;<- xmm3 stores xmm0 x xmm2
+    
+    addss xmm1,xmm1 ;<- xmm1 * 2
+    pshufd xmm1,xmm1,0
+    mulps xmm1,xmm3
+    
+    addps xmm4,xmm1
+    movhlps xmm1,xmm4
+
+    movsd [arg3],xmm4
+    movss [arg3+4+4],xmm1
+
+    leave
+    ret
+
 
 global V2Rotate_FPU; 
 ;void V2Rotate_FPU(float * Vec2_A, float * Angle_Degrees, float * Vec2_Result);
@@ -364,9 +437,51 @@ V2Rotate_FPU:
     leave 
     ret
 
+global V4ScalarMUL;void V4ScalarMUL(void * Vec4_A, float Scalar_B, void * Vec4_Result);
+;**********************************************
+;Given A (4D Vector) and B (an Scalar value),
+;4D Vector Result = (Ax * B , Ay * B,Az * B , Aw * B);
+;**********************************************
+V4ScalarMUL:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg2 R8
+    %define arg1f XMM0 ;<- I don't know why it works, it should be XMM1, isn't it?
+%endif
+    enter 0,0
+    movups arg2f, [arg1]
+    pshufd arg1f,arg1f,0
+    mulps arg1f,arg2f
+    movups [arg2],arg1f
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
+
+global V4ScalarDIV;void V4ScalarDIV(void * Vec4_A, float Scalar_B, void * Vec4_Result);
+;**********************************************
+;Given A (4D Vector) and B (an Scalar value),
+;4D Vector Result = (Ax / B , Ay / B,Az / B , Aw / B);
+;**********************************************
+V4ScalarDIV:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg2 R8
+    %define arg1f XMM0 ;<- I don't know why it works, it should be XMM1, isn't it?
+%endif
+    enter 0,0
+    movups arg2f, [arg1]
+    pshufd arg1f,arg1f,0
+    divps arg1f,arg2f
+    movups [arg2],arg1f
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
+
 global V2ScalarMUL;V2ScalarMUL(float * Vec2_A, float Scalar_B, float * Vec2_Result);
 ;**********************************************
-;Given A (2D Vectors) and B (an Scalar value),
+;Given A (2D Vector) and B (an Scalar value),
 ;2D Vector Result = (Ax * B , Ay * B);
 ;**********************************************
 V2ScalarMUL:
@@ -386,6 +501,59 @@ V2ScalarMUL:
 args_reset
 %endif
 
+global V3ScalarMUL;V3ScalarMUL(float * Vec2_A, float Scalar_B, float * Vec2_Result);
+;**********************************************
+;Given A (3D Vector) and B (an Scalar value),
+;3D Vector Result = (Ax * B , Ay * B, Az* * B);
+;**********************************************
+V3ScalarMUL:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg2 R8
+    %define arg1f XMM0 ;<- I don't know why it works, it should be XMM1, isn't it?
+%endif
+    enter 0,0
+    movsd arg2f, [arg1]
+    movsldup arg1f,arg1f
+    mulps arg2f,arg1f
+    movsd [arg2],arg2f
+    movss arg2f, [arg1+8]
+    mulss arg2f,arg1f
+    movss [arg2+8],arg2f
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
+
+global M4x4ScalarMUL;M4x4ScalarMUL(void * Matrix, float Scalar, void * Result_Matrix);
+;*********************************************************************
+;Given a 4x4 Matrix and a Scalar,
+;This algoritms multiplies each component of the matrix by the scalar.
+;**********************************************************************
+M4x4ScalarMUL:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg2 R8
+    %define arg1f XMM0 ;<- I don't know why it works, it should be XMM1, isn't it?
+%endif
+    enter 0,0
+   
+    pshufd arg1f,arg1f,0
+
+
+    mov rcx,4
+    __M4x4ScalarLoop:
+	movups arg2f,[arg1]
+	mulps arg2f,arg1f
+	movups [arg2],arg2f
+	add arg1,16
+	add arg2,16
+	loop __M4x4ScalarLoop    
+
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+args_reset
+%endif
 
 
 global V2V2ADD; V2V2ADD(float * Vec2_A, float * Vec2_B, float * Vec2_Result);
@@ -523,6 +691,46 @@ V2CalculatePerpendicular:
     args_reset
 %endif
 
+global V4V4Dot; float DotProduct = V4V4Dot (void * Vec4_A, void * Vec4_B);
+;**********************************************
+;Given A and B, 4D Vectors,
+;it returns (A . B)
+;**********************************************
+V4V4Dot:
+    enter 0,0
+    movups XMM1,[arg1]
+    pxor XMM0,XMM0
+    movups XMM2,[arg2]
+
+    DotProductXMM XMM1,XMM2,XMM0,XMM3
+
+    leave
+    ret
+
+global V3V3Dot; float DotProduct = V3V3Dot (float * Vec3_A, float * Vec3_B);
+;**********************************************
+;Given A and B 3D Vectors,
+;it returns (A . B)
+;**********************************************
+V3V3Dot:
+    enter 0,0
+        ;Loading argument 1;
+    movss arg1f,[arg1]
+    movsd arg2f, [arg1+4]
+    pslldq arg2f,4
+    movss arg2f,arg1f
+
+        ;Loading argument 2;
+    movss arg1f,[arg2]
+    movsd arg3f, [arg2+4]
+    pslldq arg3f,4
+    movss arg3f,arg1f
+        
+
+    DotProductXMMV3 arg2f,arg3f,arg4f,arg1f
+    
+    leave
+    ret
 
 global V2V2Dot; float DotProduct = V2V2Dot (float * Vec2_A, float * Vec2_B);
 ;**********************************************
@@ -883,7 +1091,7 @@ QuaternionMUL:
         pshufd xmm4,xmm5,11_00_00_00b
         pxor arg4f,xmm4
 
-    TRANS44
+  TRANS44
 
         addps arg1f,arg2f
         addps arg1f,xmm4
@@ -894,78 +1102,244 @@ QuaternionMUL:
     leave
     ret
 
+
+
+
+%macro _V4Lerp_ 4
+;%1 Is the First  Operand Vector (A)
+;%2 Is the Second Operand Vector (B)
+;%3 Is the Factor Operand Vector (t) (Previously pshufd' by itself with 0)
+;%4 Is the Destiny Vector        (C)
+;All operands must be different
+    movaps %4,%2
+    subps %4,%1  ;B-A
+    mulps %4,%3  ;(B-A)*t
+    addps %4,%1  ;C = A+((B-A)*t)
+%endmacro
+global V4Lerp; void V4Lerp(void * vec4_A, void * vec4_B, float factor, void * Result)
+;********************************************************
+;Given two 4D vectors and a scalar factor,
+;this algorithm does a Linear Interpolation
+;The result, a 4D vector, is stored in QR
+;********************************************************
+V4Lerp:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg1f XMM2 ;The third argument is a float, Factor.
+    %define arg3 R9;
+    %define argrf XMM0 ;The result will be stored here.
+%elifidn __OUTPUT_FORMAT__, elf64
+    %define argrf XMM2 ;The result will be stored here.
+%endif
+    enter 0,0
+    movups XMM3,[arg1]
+    pshufd arg1f,arg1f,0
+    movups XMM1,[arg2]
+    _V4Lerp_ XMM3,XMM1,arg1f,argrf
+    movups [arg3],argrf
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+    args_reset
+%endif
+
+ 
+global V3Lerp; void V3Lerp(void * vec3_A, void * vec3_B, float factor, void * Result)
+;********************************************************
+;Given two 3D vectors and a scalar factor,
+;this algorithm does a Linear Interpolation
+;The result, a 3D vector, is stored in QR
+;********************************************************
+V3Lerp:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg1f XMM2 ;The third argument is a float, Factor.
+    %define arg3 R9;
+    %define argrf XMM0 ;The result will be stored here.
+%elifidn __OUTPUT_FORMAT__, elf64
+    %define argrf XMM2 ;The result will be stored here.
+%endif
+    enter 0,0
+    movsd XMM3,[arg1]
+    movss argrf,[arg1+4+4]
+    movlhps XMM3,argrf
+
+    movsd XMM1,[arg2]
+    movss argrf,[arg2+4+4]
+    movlhps XMM1,argrf
+
+    pshufd arg1f,arg1f,0
+    _V4Lerp_ XMM3,XMM1,arg1f,argrf
+
+    movsd [arg3],argrf
+    movhlps argrf,argrf
+    movss [arg3+4+4],argrf
+
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+    args_reset
+%endif
+
+%macro _ScalarLerp_ 4
+;%1 Is the First  float     (A)
+;%2 Is the Second float     (B)
+;%3 Is the Factor float     (t) 
+;%4 Is the Destiny float    (C)
+;All operands must be different
+    movss %4,%2
+    subss %4,%1  ;B-A
+    mulss %4,%3  ;(B-A)*t
+    addss %4,%1  ;C = A+((B-A)*t)
+%endmacro
+global ScalarLerp; float ScalarLerp(float A, float B, float factor)
+;********************************************************
+;Given two Scalars and a scalar factor,
+;this algorithm does a Linear Interpolation
+;The result, a 2D vector, is stored in QR
+;********************************************************
+ScalarLerp:
+    enter 0,0
+    _ScalarLerp_ arg1f,arg2f,arg3f,arg4f
+    movss arg1f,arg4f
+    leave
+    ret 
+
+%macro _DoubleScalarLerp_ 4
+;%1 Is the First  double    (A)
+;%2 Is the Second double    (B)
+;%3 Is the Factor double    (t)
+;%4 Is the Destiny double   (C)
+;All operands must be different
+    movsd %4,%2
+    subsd %4,%1  ;B-A
+    mulsd %4,%3  ;(B-A)*t
+    addsd %4,%1  ;C = A+((B-A)*t)
+%endmacro
+global DoubleScalarLerp; double DoubleScalarLerp(double A, double B, double factor)
+;********************************************************
+;Given two Scalars and a scalar factor, being the scalars of double precision,
+;this algorithm does a Linear Interpolation
+;The result, a 2D vector, is stored in QR
+;********************************************************
+DoubleScalarLerp:
+    enter 0,0
+    _DoubleScalarLerp_ arg1f,arg2f,arg3f,arg4f
+    movsd arg1f,arg4f
+    leave
+    ret 
+
+%macro _V2Lerp_ 4
+;%1 Is the First  Operand Vector (A)
+;%2 Is the Second Operand Vector (B)
+;%3 Is the Factor Operand Vector (t) (Previously pshufd' by itself with 0)
+;%4 Is the Destiny Vector        (C)
+;All operands must be different
+    movsd %4,%2
+    subps %4,%1  ;B-A
+    mulps %4,%3  ;(B-A)*t
+    addps %4,%1  ;C = A+((B-A)*t)
+%endmacro
+global V2Lerp; void V2Lerp(void * vec2_A, void * vec2_B, float factor, void * Result)
+;********************************************************
+;Given two 2D vectors and a scalar factor,
+;this algorithm does a Linear Interpolation
+;The result, a 2D vector, is stored in QR
+;********************************************************
+V2Lerp:
+%ifidn __OUTPUT_FORMAT__, win64 
+    %define arg1f XMM2 ;The third argument is a float, Factor.
+    %define arg3 R9;
+    %define argrf XMM0 ;The result will be stored here.
+%elifidn __OUTPUT_FORMAT__, elf64
+    %define argrf XMM2 ;The result will be stored here.
+%endif
+    enter 0,0
+    movsd XMM3,[arg1]
+    pshufd arg1f,arg1f,0
+    movsd XMM1,[arg2]
+    _V2Lerp_ XMM3,XMM1,arg1f,argrf
+    movsd [arg3],argrf
+    leave
+    ret 
+%ifidn __OUTPUT_FORMAT__, win64 
+    args_reset
+%endif
+
 global QuaternionToMatrix4x4; QuaternionToMatrix4x4(float * Quaternion, float * Matrix)
 ;********************************************
-;Given a Quaternion, his function generates a 4x4 Matrix.
+;Given a Quaternion, this function generates a 4x4 Matrix.
 ;This algorithm is an implementation of a method by Jay Ryness (2008)
 ;Source: https://sourceforge.net/p/mjbworld/discussion/122133/thread/c59339da/
 ;********************************************
 QuaternionToMatrix4x4: 
     enter 0,0
-    
+   
+    mov rax,fc_1f
+ 
     mov dword[arg2],SignChange32bits
                 movss xmm7,[arg2]
                 ;xmm7 [0][0][0][0x800000]
+		movaps xmm6,xmm7
+		;xmm6 [0][0][0][0x800000]
+		pshufd xmm5,xmm7,01_00_01_01b
+		;xmm5 [0][0x800000][0][0]
+		pshufd xmm4,xmm7,01_01_00_01b
+		;xmm4 [0][0][0x800000][0]
 
     sub rsp,16
                 pshufd arg1f,xmm7,00_11_11_11b
                 movups arg4f,[arg1]
                 movups arg2f,arg4f
-                ;xmmm3 [w][z][y][x]
-                movaps arg3f,xmm7
-                ;xmm7 [0][0][0][0x800000]
-                pxor arg4f,arg1f
-                pshufd xmm7,xmm7,0h
+                ;xmm3 [w][z][y][x]
                 movups [rsp],arg4f
-                ;xmm7 [0x800000][0x800000][0x800000][0x800000]
-                pshufd arg3f,arg3f,11110000b
-                ;arg3f [0][0][0x800000][0x800000]
+                pshufd xmm7,xmm7,11000000b
+                ;xmm7 [0][0x800000][0x800000][0x800000]
     mov arg3,rsp
+    ;rsp=x  ;rsp+4=y	;rsp+8=z    ;rsp+12=w
                 movups arg4f,arg2f
-                ;xmmm3 [w][z][y][x]
+                ;xmm3 [w][z][y][x]
         fld dword[arg3]
     add arg3,4
         fld dword[arg3]
                 pxor xmm7,arg4f
-                ;xmmm7 [-w][-z][-y][-x]
+                ;xmm7 [w][-z][-y][-x]
     add arg3,4
         fld dword[arg3]
     add arg3,4
         fld dword[arg3]
         ;Stack: ST0= -w; ST1=z; ST2=y; ST3=x
         
-	;arg4f= [w][z][y][x]
-        ;xmm7= [-w][-z][-y][-x]
-                movups [arg2+16+16+16],xmm7
-                pshufd arg2f,arg4f,01111110b
-                ;arg2f [Y][W][W][Z]
-                movaps arg1f,arg2f
-                ;arg1f [Y][W][W][Z]
-                punpcklqdq arg2f,xmm7
-                ;arg2f [-Y][-X][W][Z]
-                movups [arg2+16],arg2f
+	;xmm3= [w][z][y][x]
+        ;xmm7= [w][-z][-y][-x]
 
-                pshufd xmm6,xmm7,00100100b
-                ;xmm6 [-X][-Z][-Y][-X]
-                ;arg1f [Y][W][W][Z]
-                punpckhdq arg1f,xmm6
-                ;arg1f [-X][Y][-Z][W]
-                movaps xmm5,arg1f
-                ;xmm5 [-X][Y][-Z][W]
-                movups [arg2],arg1f
+        movups [arg2+16+16+16],xmm3
 
-                ;xmm5 [-X][Y][-Z][W]
-                pshufd xmm5,xmm5,01_00_11_10b
-                ;xmm5 [-Z][W][-X][Y]
-                pxor arg3f,xmm5
-                ;xmm5 [-Z][W][X][-Y]
-                movups [arg2+16+16],arg3f
+	pshufd xmm0,xmm3,00011011b
+	pxor xmm0,xmm5
+	;xmm0 = [x][-y][z][w]
 
-        fchs
+	pshufd xmm1,xmm3,01001110b
+	pxor xmm1,xmm6
+	;xmm1 = [y][x][w][-z] 
+
+	pshufd xmm2,xmm3,10110001b
+	pxor xmm2,xmm4
+	;xmm2 = [z][w][-x][y]
+
+	movaps xmm3,xmm7
+	;xmm3 = [w][-z][-y][-x]
+
+	movups [arg2],xmm0
+	movups [arg2+16],xmm1
+	movups [arg2+16+16],xmm2
+	movups [arg2+16+16+16],xmm3
+
         fstp dword [arg2+16+16+16+12]
-        fstp dword [arg2+16+16+16+12-16]
-        fstp dword [arg2+16+16+16+12-16-16]
-        fstp dword [arg2+16+16+16+12-16-16-16]
+        fchs
+	fstp dword [arg2+16+16+16+12-16]
+        fchs
+	fstp dword [arg2+16+16+16+12-16-16]
+        fchs
+	fstp dword [arg2+16+16+16+12-16-16-16]
 
     TRANS44
     
@@ -977,6 +1351,10 @@ QuaternionToMatrix4x4:
         add arg3,16
         cmp arg3,64
         jne Mmullabelqua
+
+    pxor xmm3,xmm3
+    movups [arg2+16+16+16],xmm3
+    mov [arg2+16+16+16+12],eax
 
     add rsp,16
     leave

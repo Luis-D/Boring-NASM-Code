@@ -349,3 +349,124 @@ _final:
     ret
 
 %endif
+
+global Check_V3V3_vs_Plane;char Check_V3V3_vs_Plane(float *Time,void *V3V3,void *Plane,char Mode)
+;**********************************************************************************
+;Given two 3D vectors (V3V3) and a 6D vector describing a plane (3D point + 3D Normal),
+;Depending on the given Mode, this algorithm returns intersection time (Time) and:
+; - Mode 0: Line (infinite line) vs Plane intersection.
+; - Mode 1: Ray (know origin with infinite norm) vs Plane intersection.
+; - Mode 2: Line Segment (know origin and end) vs Plane intersection.
+;           *Where Origin and end are both 3D Points
+;**********************************************************************************
+    Check_V3V3_vs_Plane:
+    enter 0,0
+        xor rax,rax
+        movups xmm1,[arg3+(4*2)] ; Plane Normal (needs shift)
+        ;xmm1 [nz][ny][nx][Pz]
+        movups xmm0,[arg3]       ;Plane Position
+        ;xmm0 [nx][Pz][Py][Px]
+        psrldq xmm1,4
+        ;xmm1 [0][nz][ny][nx] ;Plane Normal
+  
+    
+            movups xmm5,[arg2+(4*2)] ; Vector End (needs shift)
+            ;xmm5 [Bz][By][Bx][Az] 
+
+
+        ;-- Calculating d = P . n
+        movaps xmm2, xmm0
+        mulps  xmm2, xmm1
+
+            movups xmm4,[arg2] ; Vector Origin
+            ;xmm4 [Bx][Az][Ay][Ax] ; A
+
+        movshdup xmm3,xmm2
+        addss    xmm3,xmm2
+
+            psrldq xmm5,4
+            ;xmm5 [0][Bz][By][Bx] Vector End
+
+        cmp arg4,2
+        jne SKIPNOTMODE2
+            subps xmm5,xmm4
+            ;xmm5 = A_B, (if MODE == 2)
+        SKIPNOTMODE2:
+
+        movhlps xmm2,xmm2
+        addss   xmm2,xmm3
+        ;xmm2 = d ;Plane d
+
+
+
+               ;-- Calculating n . A
+        movaps xmm3, xmm1
+        mulps  xmm3, xmm4	
+        movshdup xmm0,xmm3
+        addss    xmm0,xmm3
+        movhlps  xmm3,xmm3
+        addss    xmm3,xmm0
+        ;xmm3 = n.A
+
+        pcmpeqw xmm4,xmm4
+        pslld xmm4,25
+        psrld xmm4,2
+
+             ;-- Calculating n . A_B
+        mulps xmm1,xmm5
+        movshdup xmm0,xmm1
+        addss    xmm0,xmm1
+        movhlps  xmm1,xmm1
+        addss    xmm1,xmm0
+        ;xmm1 = n. A_B
+
+        pxor xmm5,xmm5
+
+        ;-- Briefing --;
+        ;xmm1[0:31] = (n . A_B)
+        ;xmm2[0:31] = d
+        ;xmm3[0:31] = (n . A)
+        ;xmm4[0:31] = 1.f
+        ;xmm5 = 0
+
+        
+        ;-- Calculating t = (d - (n . A)) / (n . A_B)
+        subss xmm2,xmm3; xmm2 = (d - (n . A))
+       
+        divss xmm2,xmm1; xmm2 = (d - (n . A)) / (n . A_B)
+        ;xmm2[0:31] = t;
+
+         movss [arg1],xmm2 ;<- Storing t (Time)
+        
+        pxor xmm3,xmm3 ; clearing xmm3
+        mov arg1,1
+
+        ;-- If mode 0 (Line vs Plane), return
+        cmp arg4,0
+        je V3V3MODE0
+
+        ;-- check if t >=0
+        ucomiss xmm2,xmm5
+        jb V3V3vsP_end; (if t<0){return 0;}
+
+        cmp arg4,2 ;check if MODE == 2
+        je V3V3MODE2
+
+        mov eax,1 ;if(t>=0 && MODE != 0 && MODE != 2){return 1;}
+        jmp V3V3vsP_end
+
+
+    V3V3MODE2: ; Line Segment Mode
+        ;-- check if t <=1
+        ucomiss xmm2,xmm4
+        cmovna rax,arg1 ; if((n . A_B) <= 1){return 1;}
+        
+        jmp V3V3vsP_end
+       
+    V3V3MODE0:
+        ;-- xmm3 shall be cleared
+        ucomiss xmm1,xmm3 ; (n . A_B) == 0
+        cmovne rax,arg1 ; if((n . A_B) != 0){return 1;}
+    V3V3vsP_end:
+    leave
+    ret

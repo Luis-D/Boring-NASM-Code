@@ -26,7 +26,8 @@
 
 ; Luis Delgado.
 
-;December 1, 2019:  Added Linear Interpolation
+;January  21,2019:  Added some 2x2 Matrix Math and 4x4 Matrix Inversion.
+;January  1, 2019:  Added Linear Interpolation.
 ;December 29,2018:  Fixed Inverted Rotation @ QuaternionToMatrix4x4. 
 ;		    Added Rotation by Quaternion.
 ;		    Added 3D Vector multiplication by 3D vector
@@ -1400,6 +1401,361 @@ AxisAngleToQuaternion:
 %ifidn __OUTPUT_FORMAT__, win64 
     args_reset
 %endif
+
+%macro _M2MUL_ 5
+; %1 Destiny
+; %2 First Operand
+; %3 Second Operand
+; %4 Temporal Operand
+; %5 Temporal Operand
+; All operands must be different
+    movups %1,%2
+    movlhps %1,%2
+    movsldup %4,%3
+    mulps %1,%4
+    movups %5,%2
+    movhlps %5,%2
+    movshdup %4,%3
+    mulps %4,%5
+    addps %1,%4
+%endmacro
+global M2MUL; void M2MUL(void * Destiny, void * A, void * B);
+    M2MUL:
+        enter 0,0
+            movups xmm2,[arg2]
+            movups xmm3,[arg3]
+            _M2MUL_ xmm1,xmm2,xmm3,xmm4,xmm5
+            movntps [arg1],xmm1
+        leave
+        ret
+
+global M2MULSS; void M2MULSS(void * Destiny, void * Matrix, float Scalar);
+    M2MULSS:
+%ifidn __OUTPUT_FORMAT__, win64 
+    arg1f xmm2
+%endif
+        enter 0,0
+            pshufd arg1f,arg1f,0
+            mulps arg1f,[arg2]
+            movntps [arg1],arg1f
+        leave
+        ret
+%ifidn __OUTPUT_FORMAT__, win64 
+   args_reset
+%endif
+
+
+
+%macro _M2DET_ 3
+; %1 Destiny
+; %2 Operand
+; %3 Temporal Operand
+; All operands must be different
+    pshufd %1,%2, 00_00_10_00b
+    pshufd %3,%2, 00_00_01_11b
+    mulps %1,%3
+    movshdup %3,%1
+    subss %1,%3
+%endmacro
+global M2DET; float M2DET(void * Matrix);
+    M2DET:
+        enter 0,0
+            movups xmm1,[arg1]
+            _M2DET_ xmm0,xmm1,xmm2
+        leave
+        ret
+
+
+%macro _M4INVERSE_Submatrices_L_ 3
+;   %1 Destiny
+;   %2 Low Source
+;   %3 High Source
+; All operands must be different
+    movaps %1,%2
+    movlhps %1,%3
+%endmacro
+%macro _M4INVERSE_Submatrices_H_ 3
+;   %1 Destiny
+;   %2 First Source
+;   %3 Second Source
+; All operands must be different
+    movaps %1,%3
+    movhlps %1,%2
+%endmacro
+%macro _M4INVERSE_ADJMULM2 5
+;   %1  Destiny
+;   %2  First Operand
+;   %3  Second Operand
+;   %4  Temporal Operand
+;   %5  Temporal Operand
+; All operands must be different
+    pshufd %1,%2,00_11_00_11b
+    mulps %1,%3
+
+    pshufd %4,%2, 01_10_01_10b
+    pshufd %5,%3, 10_11_00_01b
+    mulps %4,%5
+    subps %1,%4
+%endmacro
+%macro _M4INVERSE_M2MULADJ 5
+;   %1  Destiny
+;   %2  First Operand
+;   %3  Second Operand
+;   %4  Temporal Operand
+;   %5  Temporal Operand
+; All operands must be different
+    pshufd %1,%3,00_00_11_11b
+    mulps %1,%2
+
+    pshufd %4,%3,10_10_01_01b
+    pshufd %5,%2,01_00_11_10b
+    mulps %4,%5
+
+    subps %1,%4
+%endmacro
+
+global M4INVERSE; void M4INVERSE(void * Result, void * Matrix);
+;****************************************************************************************
+; This function returns the inverse of a given 4x4 Matrix (A).
+; It is an implementation of Eric Zhang's Fast 4x4 Matrix Inverse.
+; Source: 
+; https://lxjk.github.io/2017/09/03/Fast-4x4-Matrix-Inverse-with-SSE-SIMD-Explained.html
+;****************************************************************************************
+M4INVERSE:
+
+    enter 0,0
+
+%ifidn __OUTPUT_FORMAT__, win64 
+    sub rsp,16*2
+    movups [rsp],xmm6
+    movups [rsp+16],xmm7
+%endif
+    sub rsp,16*6
+    movups [rsp],xmm8
+    movups [rsp+16],xmm9
+    movups [rsp+16+16],xmm10
+    movups [rsp+16+16+16],xmm15
+    movups [rsp+16+16+16+16],xmm11
+    movups [rsp+16+16+16+16+16],xmm12
+
+    movups xmm4,[arg2]
+    movups xmm5,[arg2+16]
+    movups xmm6,[arg2+16+16]
+    movups xmm7,[arg2+16+16+16]
+
+    ;-- Get submatrices --;
+    _M4INVERSE_Submatrices_L_ xmm0,xmm4,xmm5 ;A;            <-----
+    _M4INVERSE_Submatrices_L_ xmm1,xmm6,xmm7 ;B;            <-----
+    _M4INVERSE_Submatrices_H_ xmm2,xmm4,xmm5 ;C;            <-----
+    _M4INVERSE_Submatrices_H_ xmm3,xmm6,xmm7 ;D;            <-----
+    ;-- Submatrices OK--;
+    
+    
+
+    ;-- Get D Determinant 
+    _M2DET_ xmm5,xmm3,xmm6
+    pshufd xmm5,xmm5,0
+    ; xmm5 = |D|
+
+    ;-- Get A Determinant --;
+    _M2DET_ xmm15,xmm0,xmm6
+    pshufd xmm15,xmm15,0
+    ; xmm15 = |A|
+
+    ;--Determinants OK;  
+   
+  
+
+    ;-- D#C
+    _M4INVERSE_ADJMULM2 xmm4,xmm3,xmm2,xmm6,xmm7;xmm4 = D#C <-----
+    ;-- OK
+       
+   
+    
+
+    ;-- Calculate X# = |D|A - B(D#C)
+    movaps xmm6,xmm0
+    mulps xmm6,xmm5
+        ;xmm6 = |D|A
+    _M2MUL_ xmm7,xmm1,xmm4,xmm8,xmm9
+        ;xmm7 =  B(D#C)
+    subps xmm6,xmm7
+    ; xmm6 = X#                                             <-----
+    ;-- X# Ok
+    
+
+    movaps xmm9,xmm15 ;<- Saving |A|
+
+        ;-- Start Calculating |M| (@ xmm15[0:31])--;
+    mulss xmm15,xmm5; |M| = |A|*|D| + ...                   <-----
+
+
+    ;-- A#B
+    _M4INVERSE_ADJMULM2 xmm5,xmm0,xmm1,xmm7,xmm8;xmm5 = A#B <-----
+
+    
+
+    ;-- Calculate W# = |A|D - C(A#B)
+    movaps xmm7,xmm3
+    mulps xmm7,xmm9
+        ;xmm7 = |A|D
+    _M2MUL_ xmm8,xmm2,xmm5,xmm9,xmm10
+        ;xmm8 = C(A#B)
+    subps xmm7, xmm8
+    ; xmm7 = W#                                             <-----
+    ; -- W# OK
+
+    
+
+
+    ;-- Get B Determinant 
+    _M2DET_ xmm9,xmm1,xmm10
+    pshufd xmm9,xmm9,0
+    ; xmm9 = |B|
+
+       ;-- Get C Determinant 
+    _M2DET_ xmm11,xmm2,xmm10
+    pshufd xmm11,xmm11,0
+    ; xmm11 = |C|
+    
+    ;--Determinants OK;     
+
+
+           ;-- Continue Calculating |M| (@ xmm15[0:31])--;
+    movss xmm10,xmm9
+    mulss xmm10,xmm11
+    addss xmm15,xmm10; |M| = |A|*|D| + |B|*|C| + ...        <-----
+
+    
+
+
+    ;-- Calculate Y# = |B|C - D(A#B)#
+    movaps xmm8,xmm2
+    mulps xmm8,xmm9
+        ;xmm8 = |B|C
+    _M4INVERSE_M2MULADJ xmm10,xmm3,xmm5,xmm9,xmm12
+        ;xmm10  = D(A#B)#
+    subps xmm8,xmm10
+    ; xmm8 = Y#                                             <-----
+
+
+    ;-- Calculate Z# = |C|B - A(D#C)#
+    movaps xmm9,xmm1
+    mulps xmm9,xmm11
+        ;xmm9 = |C|B
+    _M4INVERSE_M2MULADJ xmm10,xmm0,xmm4,xmm11,xmm12
+        ;xmm10 = A(D#C)#
+    subps xmm9,xmm10
+    ; xmm9 = Z#                                             <-----
+    ;-- Z# OK
+
+
+
+    ;-- Calculate tr((A#B)(D#C))
+    pshufd xmm10,xmm4,11_01_10_00b 
+	mulps  xmm10, xmm5
+	movshdup xmm11,xmm10
+    addps xmm10,xmm11
+    movhlps xmm11,xmm10
+	addss    xmm10,xmm11
+    ; xmm10 = tr((A#B)(D#C))                                <-----
+
+    
+
+    pcmpeqw xmm4,xmm4
+    pslld xmm4,25
+    psrld xmm4,2
+    ;xmm4 = [1][1][1][1]
+
+             ;-- Calculate |M| (@ xmm15[0:31])--;
+    subss xmm15,xmm10; |M| = |A|*|D| + |B|*|C| - tr((A#B)(D#C))        <-----
+    pshufd xmm15,xmm15,0
+    ;xmm15 = [|M|] [|M|] [|M|] [|M|]
+
+    
+
+    pcmpeqw xmm5,xmm5
+    pslld xmm5,31
+    ;xmm5 = [SB][SB][SB][SB]
+    pslldq xmm5,8
+    psrldq xmm5,4
+    ;xmm5 = [0][SB][SB][0]
+
+    pxor xmm5,xmm4
+    ;xmm5 = [1][-1][-1][1]
+    divps xmm5,xmm15
+    ;xmm5 = [1/|M|] [-1/|M|] [-1/|M|] [1/|M|]
+
+    mulps xmm6,xmm5
+    mulps xmm7,xmm5
+    mulps xmm8,xmm5
+    mulps xmm9,xmm5
+
+    ;xmm6 (X)
+    ;xmm8 (Y)
+    ;xmm9 (Z)
+    ;xmm7 (W)
+
+    ;-- Submatrices needs to be adjugated--
+    ;-- Submatrices are already partially adjugated--
+
+    ;Final matrix is:
+    ;   X#  Y#
+    ;   Z#  W#
+
+    ;Each Submatrix is Collum Mayor:
+    ;   +X0   -X2
+    ;   -X1   +X3
+    
+    ;-- Adjugating submatrices and ordering final matrix 
+
+
+    ;First Collumn (most left one)
+    movaps xmm0,xmm6
+    shufps xmm0,xmm9,01_11_01_11b
+
+    ;Second Collumn
+    movaps xmm1,xmm6
+    shufps xmm1,xmm9,00_10_00_10b
+
+    ;Third Collumn
+    movaps xmm2,xmm8
+    shufps xmm2,xmm7,01_11_01_11b
+
+    ;Fourth Collumn (most right one)
+    movaps xmm3,xmm8
+    shufps xmm3,xmm7,00_10_00_10b
+
+
+    ;-- Storing final matrix
+%if 1
+    movntps [arg1],XMM0
+    movntps [arg1+16],XMM1
+    movntps [arg1+16+16],XMM2
+    movntps [arg1+16+16+16],XMM3
+%endif
+
+    movups xmm8,[rsp]
+    movups xmm9,[rsp+16]
+    movups xmm10,[rsp+16+16]
+    movups xmm15,[rsp+16+16+16]
+    movups xmm11,[rsp+16+16+16+16]
+    movups xmm12,[rsp+16+16+16+16+16]
+    add rsp,16*6
+%ifidn __OUTPUT_FORMAT__, win64 
+    movups xmm6,[rsp]
+    movups xmm7,[rsp+16]
+    add rsp,16*2
+    args_reset
+%endif
+
+    leave
+    ret
+
+%unmacro _M4INVERSE_M2MULADJ 5
+%unmacro _M4INVERSE_ADJMULM2 5
+%unmacro _M4INVERSE_Submatrices_L_ 3
+%unmacro _M4INVERSE_Submatrices_H_ 3
 
 global PerspectiveProjectionMatrix4x4
 ;(float *matrix, float fovyInDegrees, float aspectRatio,float znear, float zfar);
